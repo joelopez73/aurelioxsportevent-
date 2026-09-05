@@ -156,6 +156,17 @@ function getSkillHistory(diagnostics, skillId) {
     });
 }
 
+/* Objectifs personnalisés : progression vers un score cible sur une compétence,
+   évaluée sur le dernier diagnostic disponible (pas de statut "atteint" stocké,
+   toujours recalculé pour rester cohérent si un nouveau diagnostic est ajouté). */
+function computeGoalProgress(diagnostic, goal) {
+  var skill = getSkill(goal.skillId);
+  var current = (diagnostic && diagnostic.entries[goal.skillId]) ? diagnostic.entries[goal.skillId].score : null;
+  var achieved = current != null && current >= goal.target;
+  var pct = current != null ? Math.min(100, Math.round((current / goal.target) * 100)) : 0;
+  return { skill: skill, current: current, achieved: achieved, pct: pct };
+}
+
 /* ---------- Générateur de plan 30 jours ---------- */
 var FREQ_BY_RANK = [3, 2, 2]; // séances/semaine pour priorité #1, #2, #3
 var DAY_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];

@@ -126,3 +126,21 @@ test("printableDiagnosticHtml / printablePlanHtml: message explicite quand rien 
   assert.match(app.printableDiagnosticHtml(), /Aucun diagnostic disponible/);
   assert.match(app.printablePlanHtml(), /Aucun plan disponible/);
 });
+
+test("viewGoalsSection: vide sans objectif, affiche la progression et le badge 'Atteint' sinon", () => {
+  const app = loadApp();
+  assert.equal(app.viewGoalsSection(), "");
+
+  const diag = { id: "d1", date: "2024-01-01", entries: {} };
+  app.SKILLS.forEach((s) => { diag.entries[s.id] = { score: 7, potential: 3 }; });
+  app.player().diagnostics.push(diag);
+  app.player().goals = [
+    { id: "g1", skillId: "vitesse", target: 9, createdAt: "2024-01-01" },
+    { id: "g2", skillId: "endurance", target: 5, createdAt: "2024-01-01" }
+  ];
+
+  const html = app.viewGoalsSection();
+  assert.match(html, /objectif 9\/10/);
+  assert.match(html, /objectif 5\/10/);
+  assert.match(html, /Atteint/); // score 7 >= cible 5 (endurance)
+});
