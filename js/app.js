@@ -642,6 +642,7 @@ function viewProgression() {
   }
   html += "</section>";
 
+  html += viewGroupComparisonSection();
   html += viewNotificationSettings();
 
   if (player().diagnostics.length >= 2) {
@@ -728,6 +729,21 @@ function checkMilestoneNotifications() {
     });
   });
   if (changed) persist();
+}
+
+function viewGroupComparisonSection() {
+  var diag = latestDiagnostic();
+  if (!diag) return "";
+  var group = computeGroupAverages(state.players, player().id);
+  if (group.count < 1) {
+    return '<section class="card"><h2>Comparaison au groupe</h2>' +
+      '<p class="muted">Ajoute d\'autres joueurs avec un diagnostic pour te comparer au groupe.</p></section>';
+  }
+  return '<section class="card"><h2>Comparaison au groupe</h2>' +
+    '<p class="muted">Toi vs la moyenne des ' + group.count + " autre" + (group.count > 1 ? "s" : "") +
+    " joueur" + (group.count > 1 ? "s" : "") + " ayant un diagnostic.</p>" +
+    '<div class="chart-box"><canvas id="chart-group-radar"></canvas></div>' +
+    "</section>";
 }
 
 function changeProgressionSkill(skillId) {
@@ -971,6 +987,19 @@ function postRenderCharts() {
     }
   }
   if (currentTab === "progression") {
+    var groupDiag = latestDiagnostic();
+    if (groupDiag) {
+      var group = computeGroupAverages(state.players, player().id);
+      if (group.count >= 1) {
+        var myAvg = computeCategoryAverages(groupDiag);
+        renderCategoryRadar("chart-group-radar", "group", [
+          { label: player().profile.name || "Toi", data: CATEGORIES.map(function (c) { return myAvg[c.id]; }),
+            backgroundColor: "rgba(61,214,255,0.2)", borderColor: "#3dd6ff", pointBackgroundColor: "#3dd6ff" },
+          { label: "Moyenne du groupe", data: CATEGORIES.map(function (c) { return group.averages[c.id]; }),
+            backgroundColor: "rgba(255,106,61,0.2)", borderColor: "#ff6a3d", pointBackgroundColor: "#ff6a3d" }
+        ], CATEGORIES.map(function (c) { return c.label; }));
+      }
+    }
     if (player().diagnostics.length >= 2) {
       var baseline = player().diagnostics[0];
       var latest2 = player().diagnostics[player().diagnostics.length - 1];

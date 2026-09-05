@@ -77,6 +77,30 @@ test("computeCategoryAverages: sans diagnostic, toutes les moyennes à 0", () =>
   app.CATEGORIES.forEach((c) => assert.equal(avg[c.id], 0));
 });
 
+test("computeGroupAverages: exclut le joueur donné et ignore ceux sans diagnostic", () => {
+  const app = loadApp();
+  const state = app.defaultState();
+  const p1 = state.players[0];
+  p1.diagnostics.push(uniformDiagnostic(app, 4, 3));
+
+  const p2 = app.addPlayer(state, "Emma");
+  p2.diagnostics.push(uniformDiagnostic(app, 8, 3));
+
+  const p3 = app.addPlayer(state, "Sans diagnostic");
+
+  const groupForP1 = app.computeGroupAverages(state.players, p1.id);
+  assert.equal(groupForP1.count, 1); // seule Emma compte, p3 est ignoré (pas de diagnostic)
+  app.CATEGORIES.forEach((c) => assert.equal(groupForP1.averages[c.id], 8));
+
+  const groupForP2 = app.computeGroupAverages(state.players, p2.id);
+  assert.equal(groupForP2.count, 1); // seul p1 compte
+  app.CATEGORIES.forEach((c) => assert.equal(groupForP2.averages[c.id], 4));
+
+  const groupAlone = app.computeGroupAverages([p3], p3.id);
+  assert.equal(groupAlone.count, 0);
+  app.CATEGORIES.forEach((c) => assert.equal(groupAlone.averages[c.id], 0));
+});
+
 test("generatePlan: 4 semaines de 7 jours, 28 tâches pour 3 priorités (3+2+2/semaine)", () => {
   const app = loadApp();
   const diag = uniformDiagnostic(app, 5, 3);
