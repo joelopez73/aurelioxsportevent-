@@ -480,7 +480,8 @@ function viewPlan() {
     '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
     '<p class="muted">' + done + "/" + total + " tâches réalisées (" + pct + "%)</p>" +
     '<div class="actions"><button class="btn" onclick="setTab(\'priorites\')">Ajuster les priorités / régénérer</button>' +
-    '<button class="btn" onclick="printPlan()">Exporter le plan en PDF</button></div>' +
+    '<button class="btn" onclick="printPlan()">Exporter le plan en PDF</button>' +
+    '<button class="btn" onclick="exportPlanICS()">Ajouter au calendrier (.ics)</button></div>' +
     "</section>";
 
   plan.weeks.forEach(function (week) {
@@ -908,6 +909,60 @@ function runPrint(html) {
 
 function printDiagnostic() { runPrint(printableDiagnosticHtml()); }
 function printPlan() { runPrint(printablePlanHtml()); }
+
+/* ---------------- EXPORT CALENDRIER (.ics) ---------------- */
+function icsEscape(str) {
+  return String(str == null ? "" : str)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+function icsDate(iso) {
+  return iso.replace(/-/g, "");
+}
+
+function exportPlanICS() {
+  var plan = player().plan;
+  if (!plan) { alert("Génère d'abord un plan avant de l'exporter."); return; }
+
+  var lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AURELIOX//FR", "CALSCALE:GREGORIAN"];
+  var stamp = todayISO().replace(/-/g, "") + "T000000Z";
+
+  plan.weeks.forEach(function (week) {
+    week.days.forEach(function (day) {
+      if (!day.tasks.length) return;
+      var summary = day.tasks.length === 1
+        ? day.tasks[0].skillLabel
+        : day.tasks.length + " exercices AURELIOX";
+      var description = day.tasks.map(function (t) { return "- " + t.skillLabel + " : " + t.text; }).join("\n");
+      lines.push(
+        "BEGIN:VEVENT",
+        "UID:" + day.date + "-" + uid() + "@aureliox",
+        "DTSTAMP:" + stamp,
+        "DTSTART;VALUE=DATE:" + icsDate(day.date),
+        "DTEND;VALUE=DATE:" + icsDate(addDays(day.date, 1)),
+        "SUMMARY:" + icsEscape("AURELIOX — " + summary),
+        "DESCRIPTION:" + icsEscape(description),
+        "END:VEVENT"
+      );
+    });
+  });
+
+  lines.push("END:VCALENDAR");
+  var ics = lines.join("\r\n");
+
+  var blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "aureliox_plan_" + (player().profile.name || "joueur") + "_" + todayISO() + ".ics";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /* ---------------- RENDER ROOT ---------------- */
 /* ---------------- RAPPEL DE SAUVEGARDE ----------------
