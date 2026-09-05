@@ -946,7 +946,21 @@ function dismissBackupReminder() {
   renderBackupBanner();
 }
 
+/* ---------------- THÈME ---------------- */
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", state.uiTheme === "light" ? "light" : "dark");
+  var btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = state.uiTheme === "light" ? "🌙 Sombre" : "☀️ Clair";
+}
+
+function toggleTheme() {
+  state.uiTheme = state.uiTheme === "light" ? "dark" : "light";
+  persist();
+  applyTheme();
+}
+
 function render() {
+  applyTheme();
   document.getElementById("player-bar").innerHTML = renderPlayerBar();
   renderBackupBanner();
   document.getElementById("nav-tabs").innerHTML = renderNav();
