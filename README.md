@@ -34,13 +34,13 @@ test/           tests de la logique métier (js/data.js + js/storage.js)
 
 ## Tests
 
-La logique métier (moteur de priorités, génération du plan, gestion multi-joueurs, dates de retest) est couverte par des tests automatisés, sans dépendance externe :
+La logique métier (moteur de priorités, génération du plan, gestion multi-joueurs, dates de retest) et les fonctions pures de l'interface (échappement HTML, export CSV, rappel de sauvegarde, quelques vues) sont couvertes par des tests automatisés, sans dépendance externe :
 
 ```
-node --test test/logic.test.js
+node --test
 ```
 
-Nécessite Node.js 18+ (utilise le test runner intégré `node:test`). L'interface (`js/app.js`) n'est pas testée automatiquement — vérification manuelle en navigateur recommandée pour tout changement visuel.
+Nécessite Node.js 18+ (utilise le test runner intégré `node:test`, qui découvre automatiquement les fichiers dans `test/`). Ce qui manipule vraiment le DOM (`render()`, `exportData()`, la soumission de formulaires...) n'est pas testé automatiquement — vérification manuelle en navigateur recommandée pour tout changement visuel.
 
 ## Note honnête
 
