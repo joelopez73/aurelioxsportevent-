@@ -337,6 +337,11 @@ function submitDiagnostic() {
 
 function csvField(v) {
   var s = String(v == null ? "" : v);
+  /* Neutralise l'injection de formule CSV (OWASP) : un champ commençant par
+     =, +, -, @, tab ou CR peut être exécuté comme une formule par Excel/
+     Sheets à l'ouverture du fichier. On le préfixe d'une apostrophe pour
+     forcer une interprétation en texte brut. */
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
   return s;
 }
