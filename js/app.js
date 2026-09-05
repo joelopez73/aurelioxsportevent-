@@ -406,14 +406,19 @@ function viewPriorites() {
     '<section class="card">' +
     "<h2>Classement complet (20 compétences)</h2>" +
     '<p class="muted">Tu peux personnaliser les 3 priorités utilisées pour le plan en cochant exactement 3 lignes.</p>' +
-    '<table class="table"><thead><tr><th></th><th>Compétence</th><th>Catégorie</th><th>Score</th><th>Potentiel</th><th>Impact</th><th>Priorité</th></tr></thead><tbody>' +
+    '<table class="table"><thead><tr><th></th><th>Compétence</th><th>Catégorie</th><th>Score</th><th>Potentiel</th><th>Impact</th><th>Priorité</th><th>Objectif</th></tr></thead><tbody>' +
     rows.map(function (r) {
       var cat = getCategory(r.category);
       var checked = selected.indexOf(r.skillId) !== -1;
+      var goal = (player().goals || []).filter(function (g) { return g.skillId === r.skillId; })[0];
+      var goalCell = goal
+        ? "🎯 " + goal.target + '/10 <button class="icon-btn" onclick="setGoal(\'' + r.skillId + '\')">✎</button>'
+        : '<button class="btn small" onclick="setGoal(\'' + r.skillId + '\')">+ Objectif</button>';
       return "<tr><td><input type=\"checkbox\" " + (checked ? "checked" : "") + " onchange=\"togglePrioritySelection('" + r.skillId + "')\"></td>" +
         "<td>" + r.label + "</td>" +
         '<td><span class="tag" style="background:' + cat.color + '22;color:' + cat.color + '">' + cat.label + "</span></td>" +
-        "<td>" + r.score + "/10</td><td>" + r.potential + "/5</td><td>×" + r.impact + "</td><td><b>" + r.priorityScore + "</b></td></tr>";
+        "<td>" + r.score + "/10</td><td>" + r.potential + "/5</td><td>×" + r.impact + "</td><td><b>" + r.priorityScore + "</b></td>" +
+        "<td>" + goalCell + "</td></tr>";
     }).join("") +
     "</tbody></table></section>"
   );
@@ -437,6 +442,30 @@ function togglePrioritySelection(skillId) {
     current.push(skillId);
   }
   state.__prioritySelection = current;
+  render();
+}
+
+/* ---------------- OBJECTIFS PERSONNALISÉS ---------------- */
+function setGoal(skillId) {
+  var skill = getSkill(skillId);
+  if (!player().goals) player().goals = [];
+  var existing = player().goals.filter(function (g) { return g.skillId === skillId; })[0];
+  var input = prompt('Objectif pour "' + skill.label + '" (score cible de 1 à 10) :', existing ? String(existing.target) : "8");
+  if (input === null) return;
+  var target = parseInt(input, 10);
+  if (isNaN(target) || target < 1 || target > 10) { alert("Merci d'entrer un nombre entre 1 et 10."); return; }
+  if (existing) {
+    existing.target = target;
+  } else {
+    player().goals.push({ id: uid(), skillId: skillId, target: target, createdAt: todayISO() });
+  }
+  persist();
+  render();
+}
+
+function removeGoal(goalId) {
+  player().goals = (player().goals || []).filter(function (g) { return g.id !== goalId; });
+  persist();
   render();
 }
 
@@ -480,7 +509,8 @@ function viewPlan() {
     '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
     '<p class="muted">' + done + "/" + total + " tâches réalisées (" + pct + "%)</p>" +
     '<div class="actions"><button class="btn" onclick="setTab(\'priorites\')">Ajuster les priorités / régénérer</button>' +
-    '<button class="btn" onclick="printPlan()">Exporter le plan en PDF</button></div>' +
+    '<button class="btn" onclick="printPlan()">Exporter le plan en PDF</button>' +
+    '<button class="btn" onclick="exportPlanICS()">Ajouter au calendrier (.ics)</button></div>' +
     "</section>";
 
   plan.weeks.forEach(function (week) {
@@ -642,6 +672,7 @@ function viewProgression() {
   }
   html += "</section>";
 
+  html += viewGoalsSection();
   html += viewGroupComparisonSection();
   html += viewNotificationSettings();
 
@@ -729,6 +760,26 @@ function checkMilestoneNotifications() {
     });
   });
   if (changed) persist();
+}
+
+function viewGoalsSection() {
+  var goals = player().goals || [];
+  if (!goals.length) return "";
+  var latest = latestDiagnostic();
+
+  return '<section class="card"><h2>Objectifs</h2>' +
+    goals.map(function (g) {
+      var progress = computeGoalProgress(latest, g);
+      return '<div class="goal-row">' +
+        '<div class="goal-label">' + escapeHtml(progress.skill.label) + " — objectif " + g.target + "/10" +
+        (progress.achieved ? ' <span class="tag" style="background:#3dff8f22;color:#3dff8f">Atteint 🎉</span>' : "") +
+        "</div>" +
+        '<div class="progress-bar"><div class="progress-fill" style="width:' + progress.pct + '%"></div></div>' +
+        '<div class="muted">Actuel : ' + (progress.current != null ? progress.current + "/10" : "—") + "</div>" +
+        '<button class="icon-btn" onclick="removeGoal(\'' + g.id + "')\">Supprimer l'objectif</button>" +
+        "</div>";
+    }).join("") +
+    "</section>";
 }
 
 function viewGroupComparisonSection() {
@@ -925,6 +976,60 @@ function runPrint(html) {
 function printDiagnostic() { runPrint(printableDiagnosticHtml()); }
 function printPlan() { runPrint(printablePlanHtml()); }
 
+/* ---------------- EXPORT CALENDRIER (.ics) ---------------- */
+function icsEscape(str) {
+  return String(str == null ? "" : str)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+function icsDate(iso) {
+  return iso.replace(/-/g, "");
+}
+
+function exportPlanICS() {
+  var plan = player().plan;
+  if (!plan) { alert("Génère d'abord un plan avant de l'exporter."); return; }
+
+  var lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AURELIOX//FR", "CALSCALE:GREGORIAN"];
+  var stamp = todayISO().replace(/-/g, "") + "T000000Z";
+
+  plan.weeks.forEach(function (week) {
+    week.days.forEach(function (day) {
+      if (!day.tasks.length) return;
+      var summary = day.tasks.length === 1
+        ? day.tasks[0].skillLabel
+        : day.tasks.length + " exercices AURELIOX";
+      var description = day.tasks.map(function (t) { return "- " + t.skillLabel + " : " + t.text; }).join("\n");
+      lines.push(
+        "BEGIN:VEVENT",
+        "UID:" + day.date + "-" + uid() + "@aureliox",
+        "DTSTAMP:" + stamp,
+        "DTSTART;VALUE=DATE:" + icsDate(day.date),
+        "DTEND;VALUE=DATE:" + icsDate(addDays(day.date, 1)),
+        "SUMMARY:" + icsEscape("AURELIOX — " + summary),
+        "DESCRIPTION:" + icsEscape(description),
+        "END:VEVENT"
+      );
+    });
+  });
+
+  lines.push("END:VCALENDAR");
+  var ics = lines.join("\r\n");
+
+  var blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "aureliox_plan_" + (player().profile.name || "joueur") + "_" + todayISO() + ".ics";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 /* ---------------- RENDER ROOT ---------------- */
 /* ---------------- RAPPEL DE SAUVEGARDE ----------------
    Toutes les données ne vivent que dans le localStorage de ce
@@ -962,7 +1067,21 @@ function dismissBackupReminder() {
   renderBackupBanner();
 }
 
+/* ---------------- THÈME ---------------- */
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", state.uiTheme === "light" ? "light" : "dark");
+  var btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = state.uiTheme === "light" ? "🌙 Sombre" : "☀️ Clair";
+}
+
+function toggleTheme() {
+  state.uiTheme = state.uiTheme === "light" ? "dark" : "light";
+  persist();
+  applyTheme();
+}
+
 function render() {
+  applyTheme();
   document.getElementById("player-bar").innerHTML = renderPlayerBar();
   renderBackupBanner();
   document.getElementById("nav-tabs").innerHTML = renderNav();

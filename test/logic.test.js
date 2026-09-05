@@ -189,6 +189,25 @@ test("getSkillHistory: renvoie les entrées dans l'ordre des diagnostics", () =>
   assert.equal(history[1].score, 6);
 });
 
+test("computeGoalProgress: pourcentage vers la cible, plafonné à 100, et détection d'atteinte", () => {
+  const app = loadApp();
+  const diag = uniformDiagnostic(app, 6, 3);
+
+  var progress = app.computeGoalProgress(diag, { skillId: "vitesse", target: 8 });
+  assert.equal(progress.current, 6);
+  assert.equal(progress.achieved, false);
+  assert.equal(progress.pct, 75);
+
+  var progressMet = app.computeGoalProgress(diag, { skillId: "vitesse", target: 5 });
+  assert.equal(progressMet.achieved, true);
+  assert.equal(progressMet.pct, 100); // 6/5 = 120%, plafonné
+
+  var progressNoDiag = app.computeGoalProgress(null, { skillId: "vitesse", target: 8 });
+  assert.equal(progressNoDiag.current, null);
+  assert.equal(progressNoDiag.achieved, false);
+  assert.equal(progressNoDiag.pct, 0);
+});
+
 test("addDays / daysBetween: arithmétique de dates cohérente", () => {
   const app = loadApp();
   assert.equal(app.addDays("2024-01-01", 30), "2024-01-31");
