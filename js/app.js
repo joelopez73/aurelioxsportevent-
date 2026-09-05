@@ -573,6 +573,8 @@ function viewProgression() {
   }
   html += "</section>";
 
+  html += viewNotificationSettings();
+
   if (player().diagnostics.length >= 2) {
     var baseline = player().diagnostics[0];
     var latest = player().diagnostics[player().diagnostics.length - 1];
@@ -601,6 +603,62 @@ function viewProgression() {
   }
 
   return html;
+}
+
+/* ---------------- RAPPELS NAVIGATEUR (J30/J60/J90) ----------------
+   Notifications via l'API Notification du navigateur : ne fonctionnent
+   que si l'app est ouverte dans un onglet (pas d'envoi en arrière-plan,
+   pas de vraie notification "push" — cette app n'a pas de serveur). */
+function notificationsSupported() {
+  return typeof Notification !== "undefined";
+}
+
+function viewNotificationSettings() {
+  if (!notificationsSupported()) return "";
+  var perm = Notification.permission;
+  var statusText = perm === "granted" ? "Activés sur cet appareil / navigateur."
+    : perm === "denied" ? "Bloqués — réactive-les dans les réglages du navigateur pour ce site si tu changes d'avis."
+    : "Pas encore activés.";
+  return '<section class="card">' +
+    "<h3>Rappels navigateur</h3>" +
+    '<p class="muted">Une notification s\'affiche quand un retest (J30/J60/J90) approche ou est dû — uniquement si cette page est ouverte dans un onglet de ce navigateur (pas de notification si l\'app est fermée, il n\'y a pas de serveur derrière).</p>' +
+    '<p class="muted">Statut : ' + statusText + "</p>" +
+    (perm === "default" ? '<div class="actions"><button class="btn" onclick="requestNotificationPermission()">Activer les rappels</button></div>' : "") +
+    "</section>";
+}
+
+function requestNotificationPermission() {
+  if (!notificationsSupported()) return;
+  Notification.requestPermission().then(function () {
+    checkMilestoneNotifications();
+    render();
+  });
+}
+
+function checkMilestoneNotifications() {
+  if (!notificationsSupported() || Notification.permission !== "granted") return;
+  if (!state.notified) state.notified = {};
+  var changed = false;
+  state.players.forEach(function (p) {
+    if (!p.profile.startDate) return;
+    retestMilestones(p.profile.startDate).forEach(function (m) {
+      if (m.status !== "due" && m.status !== "soon") return;
+      var key = p.id + ":" + m.label;
+      if (state.notified[key]) return;
+      var name = p.profile.name || "Joueur";
+      try {
+        new Notification("AURELIOX — " + m.label + " pour " + name, {
+          body: m.status === "due"
+            ? "Le retest " + m.label + " est dû (prévu le " + fmtDate(m.date) + ")."
+            : "Le retest " + m.label + " approche (" + fmtDate(m.date) + ").",
+          tag: key
+        });
+      } catch (e) { /* Notification indisponible dans ce contexte, on ignore silencieusement */ }
+      state.notified[key] = todayISO();
+      changed = true;
+    });
+  });
+  if (changed) persist();
 }
 
 function changeProgressionSkill(skillId) {
@@ -759,4 +817,5 @@ function postRenderCharts() {
 document.addEventListener("DOMContentLoaded", function () {
   document.getElementById("year").textContent = new Date().getFullYear();
   render();
+  checkMilestoneNotifications();
 });
