@@ -7,18 +7,21 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header class="topbar">
+  <header class="topbar no-print">
     <div class="brand">AURELIOX</div>
     <div class="tagline">Diagnostic → Priorités → Plan → Retest</div>
   </header>
 
-  <nav id="nav-tabs" class="tabs"></nav>
+  <div id="player-bar" class="no-print"></div>
+  <nav id="nav-tabs" class="tabs no-print"></nav>
 
-  <main id="app-content" class="content"></main>
+  <main id="app-content" class="content no-print"></main>
 
-  <footer class="footer">
+  <footer class="footer no-print">
     <p>AURELIOX — © <span id="year"></span>. Toutes les données restent dans ce navigateur (aucune connexion, aucun compte).</p>
   </footer>
+
+  <div id="print-area"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
   <script src="js/data.js"></script>

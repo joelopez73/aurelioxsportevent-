@@ -153,7 +153,43 @@ input[type="range"] { width: 100%; accent-color: var(--accent2); }
 
 .footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }
 
+.player-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.player-bar-label { color: var(--muted); }
+.player-bar select {
+  background: #0e151d;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+#print-area { display: none; }
+
 @media (max-width: 640px) {
   .skill-row { grid-template-columns: 1fr; }
   .slider-group { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; color: #111; }
+  #print-area {
+    display: block;
+    padding: 20px;
+    font-family: -apple-system, Arial, sans-serif;
+  }
+  #print-area h1 { font-size: 20px; margin-bottom: 4px; }
+  #print-area h2 { font-size: 15px; margin-top: 20px; }
+  #print-area table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  #print-area th, #print-area td { border: 1px solid #999; padding: 5px 8px; text-align: left; }
+  #print-area th { background: #eee; }
 }

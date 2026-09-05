@@ -1,11 +1,15 @@
 /* AURELIOX - application. Tout est stocké en local (localStorage),
    aucune connexion réseau requise pour fonctionner (hors chargement
-   initial de Chart.js pour les graphiques). */
+   initial de Chart.js pour les graphiques). Mode coach : plusieurs
+   joueurs peuvent être gérés dans la même app, chacun avec ses propres
+   données. */
 
 var state = loadState();
-var currentTab = state.profile.name ? "priorites" : "profil";
+var currentTab = getActivePlayer(state).profile.name ? "priorites" : "profil";
 var pendingDrill = null; // { skillId, label, text } suggestion en cours dans l'onglet Match
+var progressionSkillId = SKILLS[0].id;
 
+function player() { return getActivePlayer(state); }
 function persist() { saveState(state); }
 
 function escapeHtml(str) {
@@ -26,6 +30,56 @@ function setTab(tab) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+/* ---------------- JOUEURS (mode coach) ---------------- */
+function renderPlayerBar() {
+  var options = state.players.map(function (p) {
+    var label = p.profile.name || "Joueur sans nom";
+    return '<option value="' + p.id + '"' + (p.id === state.activePlayerId ? " selected" : "") + ">" + escapeHtml(label) + "</option>";
+  }).join("");
+
+  return '<div class="player-bar">' +
+    '<span class="player-bar-label">Joueur</span>' +
+    '<select id="player-select" onchange="switchPlayer(this.value)">' + options + "</select>" +
+    '<button class="btn small" onclick="addNewPlayer()">+ Nouveau joueur</button>' +
+    '<button class="btn small" onclick="renameActivePlayer()">Renommer</button>' +
+    (state.players.length > 1 ? '<button class="btn small danger" onclick="removeActivePlayer()">Supprimer</button>' : "") +
+    "</div>";
+}
+
+function switchPlayer(id) {
+  state.activePlayerId = id;
+  state.__forceDiagnosticForm = false;
+  state.__prioritySelection = null;
+  persist();
+  currentTab = player().profile.name ? "priorites" : "profil";
+  render();
+}
+
+function addNewPlayer() {
+  var name = prompt("Nom du nouveau joueur :");
+  if (name === null) return;
+  addPlayer(state, name.trim());
+  state.__forceDiagnosticForm = false;
+  state.__prioritySelection = null;
+  persist();
+  setTab("profil");
+}
+
+function renameActivePlayer() {
+  var name = prompt("Nouveau nom :", player().profile.name);
+  if (name === null) return;
+  player().profile.name = name.trim();
+  persist();
+  render();
+}
+
+function removeActivePlayer() {
+  if (!confirm("Supprimer ce joueur et toutes ses données (diagnostics, plan, matchs) ? Action irréversible.")) return;
+  removePlayer(state, state.activePlayerId);
+  persist();
+  setTab("priorites");
+}
+
 /* ---------------- NAV ---------------- */
 function renderNav() {
   var tabs = [
@@ -43,7 +97,7 @@ function renderNav() {
 
 /* ---------------- PROFIL ---------------- */
 function viewProfil() {
-  var p = state.profile;
+  var p = player().profile;
   var options = POSITIONS.map(function (pos) {
     return '<option value="' + pos.id + '"' + (p.poste === pos.id ? " selected" : "") + ">" + pos.label + "</option>";
   }).join("");
@@ -62,21 +116,22 @@ function viewProfil() {
     "</section>" +
     '<section class="card">' +
     "<h2>Données</h2>" +
-    '<p class="muted">Tout reste dans ce navigateur (localStorage). Exporte régulièrement une sauvegarde si tu changes d\'appareil.</p>' +
+    '<p class="muted">Tout reste dans ce navigateur (localStorage), pour tous les joueurs enregistrés. Exporte régulièrement une sauvegarde si tu changes d\'appareil.</p>' +
     '<div class="actions">' +
-    '<button class="btn" onclick="exportData()">Exporter (JSON)</button>' +
+    '<button class="btn" onclick="exportData()">Exporter tout (JSON)</button>' +
     '<label class="btn file-btn">Importer<input id="import-file" type="file" accept="application/json" onchange="importData(event)" hidden></label>' +
-    '<button class="btn danger" onclick="resetData()">Réinitialiser</button>' +
+    '<button class="btn danger" onclick="resetData()">Réinitialiser tout</button>' +
     "</div>" +
     "</section>"
   );
 }
 
 function saveProfil() {
-  state.profile.name = document.getElementById("f-name").value.trim();
-  state.profile.sport = document.getElementById("f-sport").value.trim();
-  state.profile.poste = document.getElementById("f-poste").value;
-  state.profile.startDate = document.getElementById("f-start").value || state.profile.startDate;
+  var p = player().profile;
+  p.name = document.getElementById("f-name").value.trim();
+  p.sport = document.getElementById("f-sport").value.trim();
+  p.poste = document.getElementById("f-poste").value;
+  p.startDate = document.getElementById("f-start").value || p.startDate;
   persist();
   setTab("diagnostic");
 }
@@ -86,7 +141,7 @@ function exportData() {
   var url = URL.createObjectURL(blob);
   var a = document.createElement("a");
   a.href = url;
-  a.download = "aureliox_" + (state.profile.name || "joueur") + "_" + todayISO() + ".json";
+  a.download = "aureliox_export_" + todayISO() + ".json";
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -100,7 +155,13 @@ function importData(evt) {
   reader.onload = function () {
     try {
       var parsed = JSON.parse(reader.result);
-      state = Object.assign(defaultState(), parsed);
+      if (parsed && parsed.players && parsed.players.length) {
+        state = parsed;
+      } else if (parsed && parsed.profile) {
+        state = migrateLegacyState(parsed);
+      } else {
+        throw new Error("format inconnu");
+      }
       persist();
       setTab("profil");
     } catch (e) {
@@ -111,7 +172,7 @@ function importData(evt) {
 }
 
 function resetData() {
-  if (!confirm("Effacer toutes les données AURELIOX de ce navigateur ? Cette action est irréversible.")) return;
+  if (!confirm("Effacer toutes les données AURELIOX de ce navigateur (tous les joueurs) ? Cette action est irréversible.")) return;
   state = defaultState();
   persist();
   setTab("profil");
@@ -119,35 +180,36 @@ function resetData() {
 
 /* ---------------- DIAGNOSTIC ---------------- */
 function latestDiagnostic() {
-  var d = state.diagnostics;
+  var d = player().diagnostics;
   return d.length ? d[d.length - 1] : null;
 }
 
 function viewDiagnostic() {
-  var showForm = state.__forceDiagnosticForm || state.diagnostics.length === 0;
+  var showForm = state.__forceDiagnosticForm || player().diagnostics.length === 0;
   var html = "";
 
-  if (state.diagnostics.length > 0) {
+  if (player().diagnostics.length > 0) {
     html += '<section class="card">' +
       "<h2>Historique des diagnostics</h2>" +
       '<table class="table"><thead><tr><th>Date</th>' +
       CATEGORIES.map(function (c) { return "<th>" + c.label + "</th>"; }).join("") +
       "</tr></thead><tbody>" +
-      state.diagnostics.map(function (diag) {
+      player().diagnostics.map(function (diag) {
         var avg = computeCategoryAverages(diag);
         return "<tr><td>" + fmtDate(diag.date) + "</td>" +
           CATEGORIES.map(function (c) { return "<td>" + avg[c.id] + "/10</td>"; }).join("") +
           "</tr>";
       }).join("") +
       "</tbody></table>" +
-      (showForm ? "" : '<div class="actions"><button class="btn primary" onclick="startNewDiagnostic()">+ Nouveau diagnostic (retest)</button></div>') +
+      (showForm ? "" : '<div class="actions"><button class="btn primary" onclick="startNewDiagnostic()">+ Nouveau diagnostic (retest)</button>' +
+        '<button class="btn" onclick="printDiagnostic()">Exporter le diagnostic en PDF</button></div>') +
       "</section>";
   }
 
   if (showForm) {
     var latest = latestDiagnostic();
     html += '<section class="card">' +
-      "<h2>" + (state.diagnostics.length ? "Nouveau diagnostic" : "Diagnostic initial") + "</h2>" +
+      "<h2>" + (player().diagnostics.length ? "Nouveau diagnostic" : "Diagnostic initial") + "</h2>" +
       '<p class="muted">Note chaque compétence de 1 à 10 (niveau actuel) et estime le potentiel de progression de 1 à 5 (1 = marge faible, 5 = grande marge). Sois honnête : ce sont tes scores, pas ton ressenti général.</p>' +
       '<form id="diagnostic-form">' +
       CATEGORIES.map(function (cat) {
@@ -169,7 +231,7 @@ function viewDiagnostic() {
       }).join("") +
       "</form>" +
       '<div class="actions"><button class="btn primary" onclick="submitDiagnostic()">Valider le diagnostic</button>' +
-      (state.diagnostics.length ? '<button class="btn" onclick="cancelNewDiagnostic()">Annuler</button>' : "") +
+      (player().diagnostics.length ? '<button class="btn" onclick="cancelNewDiagnostic()">Annuler</button>' : "") +
       "</div></section>";
   } else if (latest) {
     html += '<section class="card">' +
@@ -203,8 +265,8 @@ function submitDiagnostic() {
     entries[s.id] = { score: parseInt(scoreEl.value, 10), potential: parseInt(potEl.value, 10) };
   });
   var diag = { id: uid(), date: todayISO(), entries: entries };
-  state.diagnostics.push(diag);
-  if (!state.profile.startDate) state.profile.startDate = todayISO();
+  player().diagnostics.push(diag);
+  if (!player().profile.startDate) player().profile.startDate = todayISO();
   state.__forceDiagnosticForm = false;
   persist();
   setTab("priorites");
@@ -217,7 +279,7 @@ function viewPriorites() {
     return '<section class="card"><h2>Priorités</h2><p class="muted">Fais d\'abord ton diagnostic pour générer tes priorités.</p>' +
       '<div class="actions"><button class="btn primary" onclick="setTab(\'diagnostic\')">Aller au diagnostic</button></div></section>';
   }
-  var rows = computePriorityRows(diag, state.profile.poste);
+  var rows = computePriorityRows(diag, player().profile.poste);
   var top3 = rows.slice(0, 3);
   var selected = state.__prioritySelection && state.__prioritySelection.length === 3
     ? state.__prioritySelection
@@ -257,7 +319,7 @@ function viewPriorites() {
 
 function togglePrioritySelection(skillId) {
   var diag = latestDiagnostic();
-  var rows = computePriorityRows(diag, state.profile.poste);
+  var rows = computePriorityRows(diag, player().profile.poste);
   var current = state.__prioritySelection && state.__prioritySelection.length === 3
     ? state.__prioritySelection.slice()
     : rows.slice(0, 3).map(function (r) { return r.skillId; });
@@ -278,7 +340,7 @@ function togglePrioritySelection(skillId) {
 
 function generatePlanFromSelection() {
   var diag = latestDiagnostic();
-  var rows = computePriorityRows(diag, state.profile.poste);
+  var rows = computePriorityRows(diag, player().profile.poste);
   var selection = state.__prioritySelection && state.__prioritySelection.length === 3
     ? state.__prioritySelection
     : rows.slice(0, 3).map(function (r) { return r.skillId; });
@@ -287,21 +349,20 @@ function generatePlanFromSelection() {
     alert("Sélectionne exactement 3 priorités avant de générer le plan.");
     return;
   }
-  if (state.plan && !confirm("Un plan existe déjà. Le régénérer va remplacer les tâches actuelles (y compris celles ajoutées manuellement). Continuer ?")) {
+  if (player().plan && !confirm("Un plan existe déjà. Le régénérer va remplacer les tâches actuelles (y compris celles ajoutées manuellement). Continuer ?")) {
     return;
   }
   var chosen = selection.map(function (id) {
-    var r = rows.filter(function (x) { return x.skillId === id; })[0];
-    return r;
+    return rows.filter(function (x) { return x.skillId === id; })[0];
   });
-  state.plan = generatePlan(chosen, todayISO());
+  player().plan = generatePlan(chosen, todayISO());
   persist();
   setTab("plan");
 }
 
 /* ---------------- PLAN ---------------- */
 function viewPlan() {
-  var plan = state.plan;
+  var plan = player().plan;
   if (!plan) {
     return '<section class="card"><h2>Plan 30 jours</h2><p class="muted">Génère d\'abord tes priorités pour construire ton plan.</p>' +
       '<div class="actions"><button class="btn primary" onclick="setTab(\'priorites\')">Aller aux priorités</button></div></section>';
@@ -316,10 +377,11 @@ function viewPlan() {
     '<p class="muted">Basé sur : ' + plan.priorities.map(function (p) { return p.label; }).join(", ") + ". Démarré le " + fmtDate(plan.startDate) + ".</p>" +
     '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
     '<p class="muted">' + done + "/" + total + " tâches réalisées (" + pct + "%)</p>" +
-    '<div class="actions"><button class="btn" onclick="setTab(\'priorites\')">Ajuster les priorités / régénérer</button></div>' +
+    '<div class="actions"><button class="btn" onclick="setTab(\'priorites\')">Ajuster les priorités / régénérer</button>' +
+    '<button class="btn" onclick="printPlan()">Exporter le plan en PDF</button></div>' +
     "</section>";
 
-  plan.weeks.forEach(function (week, wi) {
+  plan.weeks.forEach(function (week) {
     html += '<section class="card"><h3>' + escapeHtml(week.objective) + '</h3><div class="week-grid">';
     week.days.forEach(function (day) {
       html += '<div class="day-col"><div class="day-head">' + day.label + " · " + fmtDate(day.date) + "</div>";
@@ -339,8 +401,9 @@ function viewPlan() {
 }
 
 function findTaskLocation(taskId) {
-  for (var w = 0; w < state.plan.weeks.length; w++) {
-    var days = state.plan.weeks[w].days;
+  var plan = player().plan;
+  for (var w = 0; w < plan.weeks.length; w++) {
+    var days = plan.weeks[w].days;
     for (var d = 0; d < days.length; d++) {
       for (var t = 0; t < days[d].tasks.length; t++) {
         if (days[d].tasks[t].id === taskId) return { w: w, d: d, t: t };
@@ -353,7 +416,7 @@ function findTaskLocation(taskId) {
 function toggleTask(taskId) {
   var loc = findTaskLocation(taskId);
   if (!loc) return;
-  var task = state.plan.weeks[loc.w].days[loc.d].tasks[loc.t];
+  var task = player().plan.weeks[loc.w].days[loc.d].tasks[loc.t];
   task.done = !task.done;
   persist();
   render();
@@ -362,7 +425,7 @@ function toggleTask(taskId) {
 function deleteTask(taskId) {
   var loc = findTaskLocation(taskId);
   if (!loc) return;
-  state.plan.weeks[loc.w].days[loc.d].tasks.splice(loc.t, 1);
+  player().plan.weeks[loc.w].days[loc.d].tasks.splice(loc.t, 1);
   persist();
   render();
 }
@@ -370,7 +433,7 @@ function deleteTask(taskId) {
 function quickAddTask(dateISO) {
   var text = prompt("Décris la tâche à ajouter pour le " + fmtDate(dateISO) + " :");
   if (!text) return;
-  addTaskToPlan(state.plan, "libre", "Tâche libre", text, dateISO);
+  addTaskToPlan(player().plan, "libre", "Tâche libre", text, dateISO);
   persist();
   render();
 }
@@ -406,9 +469,9 @@ function viewMatch() {
     suggestionHtml +
     "</section>";
 
-  if (state.matches.length) {
+  if (player().matches.length) {
     html += '<section class="card"><h2>Historique</h2><table class="table"><thead><tr><th>Date</th><th>Adversaire</th><th>Score</th><th>Problème</th><th>Exercice</th><th>Plan</th></tr></thead><tbody>' +
-      state.matches.slice().reverse().map(function (m) {
+      player().matches.slice().reverse().map(function (m) {
         var skill = getSkill(m.skillId);
         return "<tr><td>" + fmtDate(m.date) + "</td><td>" + escapeHtml(m.opponent) + "</td><td>" + escapeHtml(m.scoreText) + "</td>" +
           "<td>" + escapeHtml(m.problemText || (skill ? skill.label : "")) + "</td><td>" + escapeHtml(m.drillText) + "</td>" +
@@ -445,13 +508,13 @@ function addPendingDrillToPlan() {
   var problemText = document.getElementById("m-problem").value.trim();
 
   var addedToPlan = false;
-  if (state.plan) {
-    var targetDay = findNextOpenDay(state.plan, todayISO());
-    addTaskToPlan(state.plan, pendingDrill.skillId, pendingDrill.label, pendingDrill.text, targetDay);
+  if (player().plan) {
+    var targetDay = findNextOpenDay(player().plan, todayISO());
+    addTaskToPlan(player().plan, pendingDrill.skillId, pendingDrill.label, pendingDrill.text, targetDay);
     addedToPlan = true;
   }
 
-  state.matches.push({
+  player().matches.push({
     id: uid(), date: date, opponent: opponent, scoreText: scoreText,
     skillId: pendingDrill.skillId, problemText: problemText,
     drillText: pendingDrill.text, addedToPlan: addedToPlan
@@ -464,9 +527,9 @@ function addPendingDrillToPlan() {
 
 /* ---------------- PROGRESSION / RETEST ---------------- */
 function viewProgression() {
-  var milestones = retestMilestones(state.profile.startDate);
+  var milestones = retestMilestones(player().profile.startDate);
   var html = '<section class="card"><h2>Prochains retests</h2>';
-  if (!state.profile.startDate) {
+  if (!player().profile.startDate) {
     html += '<p class="muted">Fais ton diagnostic initial pour démarrer le calendrier de retest.</p>';
   } else {
     html += '<div class="milestones">' + milestones.map(function (m) {
@@ -477,27 +540,39 @@ function viewProgression() {
   }
   html += "</section>";
 
-  if (state.diagnostics.length >= 2) {
-    var baseline = state.diagnostics[0];
-    var latest = state.diagnostics[state.diagnostics.length - 1];
-    var baseAvg = computeCategoryAverages(baseline);
-    var latestAvg = computeCategoryAverages(latest);
+  if (player().diagnostics.length >= 2) {
+    var baseline = player().diagnostics[0];
+    var latest = player().diagnostics[player().diagnostics.length - 1];
 
     html += '<section class="card"><h2>Comparaison — ' + fmtDate(baseline.date) + " → " + fmtDate(latest.date) + '</h2>' +
       '<div class="chart-box"><canvas id="chart-progress-radar"></canvas></div></section>';
 
-    var deltas = SKILLS.map(function (s) {
-      var b = baseline.entries[s.id] ? baseline.entries[s.id].score : null;
-      var l = latest.entries[s.id] ? latest.entries[s.id].score : null;
-      return { label: s.label, delta: (b != null && l != null) ? (l - b) : 0 };
-    }).sort(function (a, b) { return b.delta - a.delta; });
-
-    html += '<section class="card"><h2>Évolution par compétence</h2><div class="chart-box tall"><canvas id="chart-progress-bar"></canvas></div></section>';
+    html += '<section class="card"><h2>Évolution par compétence (catégories)</h2><div class="chart-box tall"><canvas id="chart-progress-bar"></canvas></div></section>';
   } else {
     html += '<section class="card"><p class="muted">Fais au moins deux diagnostics (initial + retest) pour voir ta progression comparée.</p></section>';
   }
 
+  if (player().diagnostics.length >= 1) {
+    var skillOptions = CATEGORIES.map(function (cat) {
+      var skills = SKILLS.filter(function (s) { return s.category === cat.id; });
+      return '<optgroup label="' + cat.label + '">' +
+        skills.map(function (s) { return '<option value="' + s.id + '"' + (s.id === progressionSkillId ? " selected" : "") + '>' + s.label + "</option>"; }).join("") +
+        "</optgroup>";
+    }).join("");
+
+    html += '<section class="card"><h2>Historique détaillé par compétence</h2>' +
+      '<p class="muted">Suis l\'évolution d\'une compétence précise, diagnostic après diagnostic.</p>' +
+      '<div class="form-grid"><label>Compétence<select id="progression-skill" onchange="changeProgressionSkill(this.value)">' + skillOptions + '</select></label></div>' +
+      '<div class="chart-box"><canvas id="chart-skill-line"></canvas></div>' +
+      "</section>";
+  }
+
   return html;
+}
+
+function changeProgressionSkill(skillId) {
+  progressionSkillId = skillId;
+  render();
 }
 
 function startNewDiagnosticFromProgression() {
@@ -505,8 +580,58 @@ function startNewDiagnosticFromProgression() {
   setTab("diagnostic");
 }
 
+/* ---------------- EXPORT PDF (impression navigateur) ---------------- */
+function printableDiagnosticHtml() {
+  var p = player();
+  var diag = latestDiagnostic();
+  if (!diag) return "<p>Aucun diagnostic disponible.</p>";
+  var rows = computePriorityRows(diag, p.profile.poste);
+  var avg = computeCategoryAverages(diag);
+
+  var html = '<h1>AURELIOX — Diagnostic</h1>' +
+    "<p><b>Joueur :</b> " + escapeHtml(p.profile.name || "—") + " · <b>Sport :</b> " + escapeHtml(p.profile.sport || "—") +
+    " · <b>Poste :</b> " + (getPosition(p.profile.poste) || {}).label + " · <b>Date :</b> " + fmtDate(diag.date) + "</p>" +
+    "<h2>Moyennes par catégorie</h2><table><thead><tr>" +
+    CATEGORIES.map(function (c) { return "<th>" + c.label + "</th>"; }).join("") + "</tr></thead><tbody><tr>" +
+    CATEGORIES.map(function (c) { return "<td>" + avg[c.id] + "/10</td>"; }).join("") + "</tr></tbody></table>" +
+    "<h2>Détail des 20 compétences</h2><table><thead><tr><th>Compétence</th><th>Catégorie</th><th>Score</th><th>Potentiel</th><th>Priorité</th></tr></thead><tbody>" +
+    rows.map(function (r) {
+      var cat = getCategory(r.category);
+      return "<tr><td>" + escapeHtml(r.label) + "</td><td>" + cat.label + "</td><td>" + r.score + "/10</td><td>" + r.potential + "/5</td><td>" + r.priorityScore + "</td></tr>";
+    }).join("") + "</tbody></table>";
+  return html;
+}
+
+function printablePlanHtml() {
+  var p = player();
+  var plan = p.plan;
+  if (!plan) return "<p>Aucun plan disponible.</p>";
+  var html = '<h1>AURELIOX — Plan 30 jours</h1>' +
+    "<p><b>Joueur :</b> " + escapeHtml(p.profile.name || "—") + " · <b>Priorités :</b> " + plan.priorities.map(function (x) { return escapeHtml(x.label); }).join(", ") +
+    " · <b>Début :</b> " + fmtDate(plan.startDate) + "</p>";
+  plan.weeks.forEach(function (week) {
+    html += "<h2>" + escapeHtml(week.objective) + "</h2><table><thead><tr><th>Jour</th><th>Date</th><th>Tâches</th></tr></thead><tbody>";
+    week.days.forEach(function (day) {
+      var tasks = day.tasks.map(function (t) { return (t.done ? "☑ " : "☐ ") + escapeHtml(t.skillLabel) + " — " + escapeHtml(t.text); }).join("<br>");
+      html += "<tr><td>" + day.label + "</td><td>" + fmtDate(day.date) + "</td><td>" + (tasks || "—") + "</td></tr>";
+    });
+    html += "</tbody></table>";
+  });
+  return html;
+}
+
+function runPrint(html) {
+  var area = document.getElementById("print-area");
+  area.innerHTML = html;
+  window.print();
+}
+
+function printDiagnostic() { runPrint(printableDiagnosticHtml()); }
+function printPlan() { runPrint(printablePlanHtml()); }
+
 /* ---------------- RENDER ROOT ---------------- */
 function render() {
+  document.getElementById("player-bar").innerHTML = renderPlayerBar();
   document.getElementById("nav-tabs").innerHTML = renderNav();
   var content = document.getElementById("app-content");
   var viewFns = {
@@ -528,27 +653,36 @@ function postRenderCharts() {
       }], CATEGORIES.map(function (c) { return c.label; }));
     }
   }
-  if (currentTab === "progression" && state.diagnostics.length >= 2) {
-    var baseline = state.diagnostics[0];
-    var latest2 = state.diagnostics[state.diagnostics.length - 1];
-    var baseAvg = computeCategoryAverages(baseline);
-    var latestAvg = computeCategoryAverages(latest2);
-    renderCategoryRadar("chart-progress-radar", "progress", [
-      { label: "Diagnostic initial (" + fmtDate(baseline.date) + ")", data: CATEGORIES.map(function (c) { return baseAvg[c.id]; }),
-        backgroundColor: "rgba(143,163,184,0.15)", borderColor: "#8fa3b8", pointBackgroundColor: "#8fa3b8" },
-      { label: "Dernier diagnostic (" + fmtDate(latest2.date) + ")", data: CATEGORIES.map(function (c) { return latestAvg[c.id]; }),
-        backgroundColor: "rgba(61,255,143,0.25)", borderColor: "#3dff8f", pointBackgroundColor: "#3dff8f" }
-    ], CATEGORIES.map(function (c) { return c.label; }));
+  if (currentTab === "progression") {
+    if (player().diagnostics.length >= 2) {
+      var baseline = player().diagnostics[0];
+      var latest2 = player().diagnostics[player().diagnostics.length - 1];
+      var baseAvg = computeCategoryAverages(baseline);
+      var latestAvg = computeCategoryAverages(latest2);
+      renderCategoryRadar("chart-progress-radar", "progress", [
+        { label: "Diagnostic initial (" + fmtDate(baseline.date) + ")", data: CATEGORIES.map(function (c) { return baseAvg[c.id]; }),
+          backgroundColor: "rgba(143,163,184,0.15)", borderColor: "#8fa3b8", pointBackgroundColor: "#8fa3b8" },
+        { label: "Dernier diagnostic (" + fmtDate(latest2.date) + ")", data: CATEGORIES.map(function (c) { return latestAvg[c.id]; }),
+          backgroundColor: "rgba(61,255,143,0.25)", borderColor: "#3dff8f", pointBackgroundColor: "#3dff8f" }
+      ], CATEGORIES.map(function (c) { return c.label; }));
 
-    var deltas = SKILLS.map(function (s) {
-      var b = baseline.entries[s.id] ? baseline.entries[s.id].score : 0;
-      var l = latest2.entries[s.id] ? latest2.entries[s.id].score : 0;
-      return { label: s.label, delta: l - b };
-    }).sort(function (a, b) { return b.delta - a.delta; });
-    renderSkillBar("chart-progress-bar", "progressbar",
-      deltas.map(function (d) { return d.label; }),
-      deltas.map(function (d) { return d.delta; }),
-      "#3dff8f");
+      var deltas = SKILLS.map(function (s) {
+        var b = baseline.entries[s.id] ? baseline.entries[s.id].score : 0;
+        var l = latest2.entries[s.id] ? latest2.entries[s.id].score : 0;
+        return { label: s.label, delta: l - b };
+      }).sort(function (a, b) { return b.delta - a.delta; });
+      renderSkillBar("chart-progress-bar", "progressbar",
+        deltas.map(function (d) { return d.label; }),
+        deltas.map(function (d) { return d.delta; }),
+        "#3dff8f");
+    }
+    if (player().diagnostics.length >= 1) {
+      var history = getSkillHistory(player().diagnostics, progressionSkillId);
+      renderSkillLine("chart-skill-line", "skillline",
+        history.map(function (h) { return fmtDate(h.date); }),
+        history.map(function (h) { return h.score; }),
+        history.map(function (h) { return h.potential; }));
+    }
   }
 }
 

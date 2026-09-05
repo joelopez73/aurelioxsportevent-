@@ -66,6 +66,39 @@ function renderSkillBar(canvasId, key, labels, values, color) {
   });
 }
 
+function renderSkillLine(canvasId, key, labels, scoreValues, potentialValues) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (!chartsAvailable()) {
+    canvas.replaceWith(offlineNotice(canvas));
+    return;
+  }
+  destroyChart(key);
+  var datasets = [{
+    label: "Score /10", data: scoreValues, borderColor: "#3dd6ff",
+    backgroundColor: "rgba(61,214,255,0.15)", tension: 0.25, fill: true, pointRadius: 4
+  }];
+  if (potentialValues) {
+    datasets.push({
+      label: "Potentiel /5 (x2 pour échelle)", data: potentialValues.map(function (v) { return v * 2; }),
+      borderColor: "#ffd23d", borderDash: [5, 4], pointRadius: 3, tension: 0.25, fill: false
+    });
+  }
+  chartInstances[key] = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { min: 0, max: 10, ticks: { color: "#8fa3b8", stepSize: 2 }, grid: { color: "rgba(143,163,184,0.1)" } },
+        x: { ticks: { color: "#8fa3b8" }, grid: { display: false } }
+      },
+      plugins: { legend: { labels: { color: "#dbe7f2" } } }
+    }
+  });
+}
+
 function offlineNotice(canvas) {
   var div = document.createElement("div");
   div.className = "chart-offline";

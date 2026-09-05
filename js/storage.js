@@ -1,28 +1,49 @@
-/* AURELIOX - persistance locale (localStorage) + logique métier */
+/* AURELIOX - persistance locale (localStorage) + logique métier.
+   Mode coach : l'état contient une liste de joueurs, chacun avec son
+   propre profil / diagnostics / plan / matchs. Un usage solo n'est
+   qu'un état à un seul joueur. */
 
-var STORAGE_KEY = "aureliox_state_v1";
+var STORAGE_KEY = "aureliox_state_v2";
+var STORAGE_KEY_LEGACY = "aureliox_state_v1";
+
+function defaultPlayer(name) {
+  return {
+    id: uid(),
+    profile: { name: name || "", sport: "", poste: "milieu", startDate: null },
+    diagnostics: [],  // { id, date, entries: { skillId: { score, potential } } }
+    plan: null,       // { generatedAt, startDate, priorities:[...], weeks: [ {objective, days:[{date,label,tasks:[]}x7]} x4 ] }
+    matches: []       // { id, date, opponent, scoreText, skillId, problemText, drillText, addedToPlan }
+  };
+}
 
 function defaultState() {
-  return {
-    profile: {
-      name: "",
-      sport: "",
-      poste: "milieu",
-      startDate: null
-    },
-    diagnostics: [],   // { id, date, entries: { skillId: { score, potential } } }
-    plan: null,        // { generatedFrom, generatedAt, weeks: [ {objective, days:[{date,label,tasks:[]}x7]} x4 ] }
-    matches: []        // { id, date, opponent, scoreText, skillId, problemText, drillText, addedToPlan }
-  };
+  var p = defaultPlayer("");
+  return { players: [p], activePlayerId: p.id };
+}
+
+function migrateLegacyState(legacy) {
+  var player = defaultPlayer(legacy.profile ? legacy.profile.name : "");
+  if (legacy.profile) player.profile = Object.assign(player.profile, legacy.profile);
+  player.diagnostics = legacy.diagnostics || [];
+  player.plan = legacy.plan || null;
+  player.matches = legacy.matches || [];
+  return { players: [player], activePlayerId: player.id };
 }
 
 function loadState() {
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    var parsed = JSON.parse(raw);
-    var base = defaultState();
-    return Object.assign(base, parsed);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && parsed.players && parsed.players.length) return parsed;
+    }
+    var legacyRaw = localStorage.getItem(STORAGE_KEY_LEGACY);
+    if (legacyRaw) {
+      var migrated = migrateLegacyState(JSON.parse(legacyRaw));
+      saveState(migrated);
+      return migrated;
+    }
+    return defaultState();
   } catch (e) {
     console.warn("AURELIOX: lecture localStorage impossible, état par défaut utilisé.", e);
     return defaultState();
@@ -37,6 +58,27 @@ function saveState(state) {
     console.warn("AURELIOX: écriture localStorage impossible.", e);
     return false;
   }
+}
+
+/* ---------- Gestion multi-joueurs ---------- */
+function getActivePlayer(state) {
+  var found = null;
+  state.players.forEach(function (pl) { if (pl.id === state.activePlayerId) found = pl; });
+  return found || state.players[0];
+}
+
+function addPlayer(state, name) {
+  var p = defaultPlayer(name || "");
+  state.players.push(p);
+  state.activePlayerId = p.id;
+  return p;
+}
+
+function removePlayer(state, id) {
+  if (state.players.length <= 1) return false;
+  state.players = state.players.filter(function (p) { return p.id !== id; });
+  if (state.activePlayerId === id) state.activePlayerId = state.players[0].id;
+  return true;
 }
 
 function uid() {
@@ -103,6 +145,15 @@ function computeCategoryAverages(diagnostic) {
     out[c.id] = counts[c.id] ? Math.round((sums[c.id] / counts[c.id]) * 10) / 10 : 0;
   });
   return out;
+}
+
+/* Historique d'une compétence à travers tous les diagnostics d'un joueur */
+function getSkillHistory(diagnostics, skillId) {
+  return diagnostics
+    .filter(function (d) { return d.entries[skillId]; })
+    .map(function (d) {
+      return { date: d.date, score: d.entries[skillId].score, potential: d.entries[skillId].potential };
+    });
 }
 
 /* ---------- Générateur de plan 30 jours ---------- */
