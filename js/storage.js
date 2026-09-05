@@ -9,7 +9,7 @@ var STORAGE_KEY_LEGACY = "aureliox_state_v1";
 function defaultPlayer(name) {
   return {
     id: uid(),
-    profile: { name: name || "", sport: "", poste: "milieu", startDate: null },
+    profile: { name: name || "", sport: "Football", poste: "milieu-offensif", startDate: null },
     diagnostics: [],  // { id, date, entries: { skillId: { score, potential } } }
     plan: null,       // { generatedAt, startDate, priorities:[...], weeks: [ {objective, days:[{date,label,tasks:[]}x7]} x4 ] }
     matches: []       // { id, date, opponent, scoreText, skillId, problemText, drillText, addedToPlan }
