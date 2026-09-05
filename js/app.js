@@ -151,6 +151,9 @@ function exportData() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  state.lastExportAt = todayISO();
+  persist();
+  render();
 }
 
 function importData(evt) {
@@ -828,8 +831,45 @@ function printDiagnostic() { runPrint(printableDiagnosticHtml()); }
 function printPlan() { runPrint(printablePlanHtml()); }
 
 /* ---------------- RENDER ROOT ---------------- */
+/* ---------------- RAPPEL DE SAUVEGARDE ----------------
+   Toutes les données ne vivent que dans le localStorage de ce
+   navigateur : sans export JSON régulier, un vidage de cache ou un
+   changement d'appareil les efface définitivement. */
+var BACKUP_REMINDER_DAYS = 14;
+
+function needsBackupReminder() {
+  var hasData = state.players.some(function (p) { return p.diagnostics.length > 0; });
+  if (!hasData) return false;
+  var daysSince = state.lastExportAt ? daysBetween(state.lastExportAt, todayISO()) : Infinity;
+  if (daysSince < BACKUP_REMINDER_DAYS) return false;
+  if (state.reminderDismissedOn === todayISO()) return false;
+  return true;
+}
+
+function renderBackupBanner() {
+  var el = document.getElementById("backup-banner");
+  if (!el) return;
+  if (!needsBackupReminder()) { el.innerHTML = ""; return; }
+  var lastText = state.lastExportAt
+    ? "Dernière sauvegarde : il y a " + daysBetween(state.lastExportAt, todayISO()) + " jours."
+    : "Aucune sauvegarde exportée pour l'instant.";
+  el.innerHTML = '<div class="backup-banner">' +
+    "<span>💾 Tes données ne sont stockées que dans ce navigateur — un vidage de cache ou un changement d'appareil les efface définitivement. " + lastText + "</span>" +
+    '<span class="backup-banner-actions">' +
+    '<button class="btn small primary" onclick="exportData()">Exporter maintenant</button>' +
+    '<button class="btn small" onclick="dismissBackupReminder()">Plus tard</button>' +
+    "</span></div>";
+}
+
+function dismissBackupReminder() {
+  state.reminderDismissedOn = todayISO();
+  persist();
+  renderBackupBanner();
+}
+
 function render() {
   document.getElementById("player-bar").innerHTML = renderPlayerBar();
+  renderBackupBanner();
   document.getElementById("nav-tabs").innerHTML = renderNav();
   var content = document.getElementById("app-content");
   var viewFns = {
