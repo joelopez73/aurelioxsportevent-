@@ -88,7 +88,8 @@ function renderNav() {
     { id: "priorites", label: "Priorités" },
     { id: "plan", label: "Plan 30 jours" },
     { id: "match", label: "Match → Drill" },
-    { id: "progression", label: "Progression" }
+    { id: "progression", label: "Progression" },
+    { id: "club", label: "Club" }
   ];
   return tabs.map(function (t) {
     return '<button class="tab-btn' + (currentTab === t.id ? " active" : "") + '" onclick="setTab(\'' + t.id + '\')">' + t.label + "</button>";
@@ -202,7 +203,8 @@ function viewDiagnostic() {
       }).join("") +
       "</tbody></table>" +
       (showForm ? "" : '<div class="actions"><button class="btn primary" onclick="startNewDiagnostic()">+ Nouveau diagnostic (retest)</button>' +
-        '<button class="btn" onclick="printDiagnostic()">Exporter le diagnostic en PDF</button></div>') +
+        '<button class="btn" onclick="printDiagnostic()">Exporter le diagnostic en PDF</button>' +
+        '<button class="btn" onclick="exportDiagnosticsCSV()">Exporter en CSV</button></div>') +
       "</section>";
   }
 
@@ -270,6 +272,37 @@ function submitDiagnostic() {
   state.__forceDiagnosticForm = false;
   persist();
   setTab("priorites");
+}
+
+function csvField(v) {
+  var s = String(v == null ? "" : v);
+  if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportDiagnosticsCSV() {
+  var p = player();
+  if (!p.diagnostics.length) { alert("Aucun diagnostic à exporter."); return; }
+  var rows = [["Joueur", "Date", "Compétence", "Catégorie", "Score /10", "Potentiel /5", "Priorité (poste actuel)"]];
+  p.diagnostics.forEach(function (diag) {
+    var priorityRows = computePriorityRows(diag, p.profile.poste);
+    var bySkill = {};
+    priorityRows.forEach(function (r) { bySkill[r.skillId] = r; });
+    SKILLS.forEach(function (s) {
+      var r = bySkill[s.id];
+      rows.push([p.profile.name || "Joueur", diag.date, s.label, getCategory(s.category).label, r.score, r.potential, r.priorityScore]);
+    });
+  });
+  var csv = rows.map(function (row) { return row.map(csvField).join(","); }).join("\r\n");
+  var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "aureliox_diagnostics_" + (p.profile.name || "joueur") + "_" + todayISO() + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ---------------- PRIORITES ---------------- */
@@ -580,6 +613,43 @@ function startNewDiagnosticFromProgression() {
   setTab("diagnostic");
 }
 
+/* ---------------- CLUB (vue agrégée multi-joueurs) ---------------- */
+function viewClub() {
+  var rows = state.players.map(function (p) {
+    var diag = p.diagnostics.length ? p.diagnostics[p.diagnostics.length - 1] : null;
+    var top3 = diag ? computeTopPriorities(diag, p.profile.poste, 3) : [];
+    var pos = getPosition(p.profile.poste);
+    return { player: p, diag: diag, top3: top3, posLabel: pos ? pos.label : "—" };
+  });
+
+  var html = '<section class="card">' +
+    "<h2>Vue Club</h2>" +
+    '<p class="muted">Vue d\'ensemble de tous les joueurs enregistrés dans cette app : dernier diagnostic et priorités actuelles.</p>' +
+    '<table class="table"><thead><tr><th>Joueur</th><th>Poste</th><th>Dernier diagnostic</th><th>Priorité #1</th><th>Priorité #2</th><th>Priorité #3</th><th></th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      var name = r.player.profile.name || "Joueur sans nom";
+      var top3Cells = [0, 1, 2].map(function (i) {
+        return "<td>" + (r.top3[i] ? escapeHtml(r.top3[i].label) : "—") + "</td>";
+      }).join("");
+      return "<tr><td>" + escapeHtml(name) + "</td><td>" + escapeHtml(r.posLabel) + "</td>" +
+        "<td>" + (r.diag ? fmtDate(r.diag.date) : "aucun diagnostic") + "</td>" +
+        top3Cells +
+        "<td><button class=\"btn small\" onclick=\"viewPlayerFromClub('" + r.player.id + "')\">Voir</button></td></tr>";
+    }).join("") +
+    "</tbody></table>" +
+    "</section>";
+
+  return html;
+}
+
+function viewPlayerFromClub(id) {
+  state.activePlayerId = id;
+  state.__forceDiagnosticForm = false;
+  state.__prioritySelection = null;
+  persist();
+  setTab("priorites");
+}
+
 /* ---------------- EXPORT PDF (impression navigateur) ---------------- */
 function printableDiagnosticHtml() {
   var p = player();
@@ -636,7 +706,7 @@ function render() {
   var content = document.getElementById("app-content");
   var viewFns = {
     profil: viewProfil, diagnostic: viewDiagnostic, priorites: viewPriorites,
-    plan: viewPlan, match: viewMatch, progression: viewProgression
+    plan: viewPlan, match: viewMatch, progression: viewProgression, club: viewClub
   };
   content.innerHTML = (viewFns[currentTab] || viewProfil)();
   postRenderCharts();
