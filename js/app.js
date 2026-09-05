@@ -50,6 +50,8 @@ function switchPlayer(id) {
   state.activePlayerId = id;
   state.__forceDiagnosticForm = false;
   state.__prioritySelection = null;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = null;
   persist();
   currentTab = player().profile.name ? "priorites" : "profil";
   render();
@@ -61,6 +63,8 @@ function addNewPlayer() {
   addPlayer(state, name.trim());
   state.__forceDiagnosticForm = false;
   state.__prioritySelection = null;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = null;
   persist();
   setTab("profil");
 }
@@ -187,6 +191,7 @@ function latestDiagnostic() {
 
 function viewDiagnostic() {
   var showForm = state.__forceDiagnosticForm || player().diagnostics.length === 0;
+  var latest = latestDiagnostic();
   var html = "";
 
   if (player().diagnostics.length > 0) {
@@ -209,32 +214,8 @@ function viewDiagnostic() {
   }
 
   if (showForm) {
-    var latest = latestDiagnostic();
-    html += '<section class="card">' +
-      "<h2>" + (player().diagnostics.length ? "Nouveau diagnostic" : "Diagnostic initial") + "</h2>" +
-      '<p class="muted">Note chaque compétence de 1 à 10 (niveau actuel) et estime le potentiel de progression de 1 à 5 (1 = marge faible, 5 = grande marge). Sois honnête : ce sont tes scores, pas ton ressenti général.</p>' +
-      '<form id="diagnostic-form">' +
-      CATEGORIES.map(function (cat) {
-        var skills = SKILLS.filter(function (s) { return s.category === cat.id; });
-        return '<div class="cat-block"><h3 style="color:' + cat.color + '">' + cat.label + "</h3>" +
-          skills.map(function (s) {
-            var prev = latest ? latest.entries[s.id] : null;
-            var score = prev ? prev.score : 5;
-            var potential = prev ? prev.potential : 3;
-            return '<div class="skill-row">' +
-              '<div class="skill-name">' + s.label + "</div>" +
-              '<div class="slider-group"><label>Niveau <span id="val-score-' + s.id + '">' + score + '</span>/10' +
-              '<input type="range" min="1" max="10" value="' + score + '" data-skill="' + s.id + '" data-kind="score" oninput="onSliderInput(this)"></label>' +
-              '<label>Potentiel <span id="val-potential-' + s.id + '">' + potential + '</span>/5' +
-              '<input type="range" min="1" max="5" value="' + potential + '" data-skill="' + s.id + '" data-kind="potential" oninput="onSliderInput(this)"></label>' +
-              "</div></div>";
-          }).join("") +
-          "</div>";
-      }).join("") +
-      "</form>" +
-      '<div class="actions"><button class="btn primary" onclick="submitDiagnostic()">Valider le diagnostic</button>' +
-      (player().diagnostics.length ? '<button class="btn" onclick="cancelNewDiagnostic()">Annuler</button>' : "") +
-      "</div></section>";
+    if (!state.__diagnosticDraft) state.__diagnosticDraft = initDiagnosticDraft();
+    html += viewDiagnosticStep();
   } else if (latest) {
     html += '<section class="card">' +
       "<h2>Vue d'ensemble — dernier diagnostic (" + fmtDate(latest.date) + ")</h2>" +
@@ -245,6 +226,83 @@ function viewDiagnostic() {
   return html;
 }
 
+/* Diagnostic en 5 étapes (une catégorie à la fois, 4 compétences par écran)
+   plutôt qu'un formulaire de 20 lignes d'un coup. Les valeurs saisies sont
+   conservées dans state.__diagnosticDraft en avançant/reculant entre les
+   étapes, et ne sont écrites dans un vrai diagnostic qu'à la validation
+   finale. */
+function initDiagnosticDraft() {
+  var latest = latestDiagnostic();
+  var draft = {};
+  SKILLS.forEach(function (s) {
+    var prev = latest ? latest.entries[s.id] : null;
+    draft[s.id] = { score: prev ? prev.score : 5, potential: prev ? prev.potential : 3 };
+  });
+  return draft;
+}
+
+function viewDiagnosticStep() {
+  var step = state.__diagnosticStep || 0;
+  var cat = CATEGORIES[step];
+  var skills = SKILLS.filter(function (s) { return s.category === cat.id; });
+  var draft = state.__diagnosticDraft;
+  var isFirst = step === 0;
+  var isLast = step === CATEGORIES.length - 1;
+  var pct = Math.round(((step + 1) / CATEGORIES.length) * 100);
+
+  return '<section class="card">' +
+    "<h2>" + (player().diagnostics.length ? "Nouveau diagnostic" : "Diagnostic initial") + "</h2>" +
+    '<p class="muted">Étape ' + (step + 1) + "/" + CATEGORIES.length + " — " + cat.label + '</p>' +
+    '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + "%;background:" + cat.color + '"></div></div>' +
+    '<p class="muted">Note chaque compétence de 1 à 10 (niveau actuel) et estime le potentiel de progression de 1 à 5 (1 = marge faible, 5 = grande marge). Sois honnête : ce sont tes scores, pas ton ressenti général.</p>' +
+    '<form id="diagnostic-form">' +
+    '<div class="cat-block"><h3 style="color:' + cat.color + '">' + cat.label + "</h3>" +
+    skills.map(function (s) {
+      var v = draft[s.id];
+      return '<div class="skill-row">' +
+        '<div class="skill-name">' + s.label + "</div>" +
+        '<div class="slider-group"><label>Niveau <span id="val-score-' + s.id + '">' + v.score + '</span>/10' +
+        '<input type="range" min="1" max="10" value="' + v.score + '" data-skill="' + s.id + '" data-kind="score" oninput="onSliderInput(this)"></label>' +
+        '<label>Potentiel <span id="val-potential-' + s.id + '">' + v.potential + '</span>/5' +
+        '<input type="range" min="1" max="5" value="' + v.potential + '" data-skill="' + s.id + '" data-kind="potential" oninput="onSliderInput(this)"></label>' +
+        "</div></div>";
+    }).join("") +
+    "</div></form>" +
+    '<div class="actions">' +
+    (isFirst ? "" : '<button class="btn" onclick="diagnosticStepBack()">← Précédent</button>') +
+    (isLast
+      ? '<button class="btn primary" onclick="submitDiagnostic()">Valider le diagnostic</button>'
+      : '<button class="btn primary" onclick="diagnosticStepNext()">Suivant →</button>') +
+    (player().diagnostics.length ? '<button class="btn" onclick="cancelNewDiagnostic()">Annuler</button>' : "") +
+    "</div></section>";
+}
+
+function captureDiagnosticStepInputs() {
+  var step = state.__diagnosticStep || 0;
+  var cat = CATEGORIES[step];
+  SKILLS.filter(function (s) { return s.category === cat.id; }).forEach(function (s) {
+    var scoreEl = document.querySelector('input[data-skill="' + s.id + '"][data-kind="score"]');
+    var potEl = document.querySelector('input[data-skill="' + s.id + '"][data-kind="potential"]');
+    if (scoreEl && potEl) {
+      state.__diagnosticDraft[s.id] = { score: parseInt(scoreEl.value, 10), potential: parseInt(potEl.value, 10) };
+    }
+  });
+}
+
+function diagnosticStepNext() {
+  captureDiagnosticStepInputs();
+  state.__diagnosticStep = Math.min(CATEGORIES.length - 1, (state.__diagnosticStep || 0) + 1);
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function diagnosticStepBack() {
+  captureDiagnosticStepInputs();
+  state.__diagnosticStep = Math.max(0, (state.__diagnosticStep || 0) - 1);
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function onSliderInput(el) {
   var span = document.getElementById("val-" + el.dataset.kind + "-" + el.dataset.skill);
   if (span) span.textContent = el.value;
@@ -252,24 +310,27 @@ function onSliderInput(el) {
 
 function startNewDiagnostic() {
   state.__forceDiagnosticForm = true;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = initDiagnosticDraft();
   render();
 }
 function cancelNewDiagnostic() {
   state.__forceDiagnosticForm = false;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = null;
   render();
 }
 
 function submitDiagnostic() {
+  captureDiagnosticStepInputs();
   var entries = {};
-  SKILLS.forEach(function (s) {
-    var scoreEl = document.querySelector('input[data-skill="' + s.id + '"][data-kind="score"]');
-    var potEl = document.querySelector('input[data-skill="' + s.id + '"][data-kind="potential"]');
-    entries[s.id] = { score: parseInt(scoreEl.value, 10), potential: parseInt(potEl.value, 10) };
-  });
+  SKILLS.forEach(function (s) { entries[s.id] = state.__diagnosticDraft[s.id]; });
   var diag = { id: uid(), date: todayISO(), entries: entries };
   player().diagnostics.push(diag);
   if (!player().profile.startDate) player().profile.startDate = todayISO();
   state.__forceDiagnosticForm = false;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = null;
   persist();
   setTab("priorites");
 }
@@ -668,6 +729,8 @@ function changeProgressionSkill(skillId) {
 
 function startNewDiagnosticFromProgression() {
   state.__forceDiagnosticForm = true;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = initDiagnosticDraft();
   setTab("diagnostic");
 }
 
@@ -704,6 +767,8 @@ function viewPlayerFromClub(id) {
   state.activePlayerId = id;
   state.__forceDiagnosticForm = false;
   state.__prioritySelection = null;
+  state.__diagnosticStep = 0;
+  state.__diagnosticDraft = null;
   persist();
   setTab("priorites");
 }
