@@ -768,6 +768,8 @@ function viewClub() {
     "</tbody></table>" +
     "</section>";
 
+  html += viewPlayerComparison();
+
   return html;
 }
 
@@ -779,6 +781,83 @@ function viewPlayerFromClub(id) {
   state.__diagnosticDraft = null;
   persist();
   setTab("priorites");
+}
+
+function latestDiagnosticOf(p) {
+  return p.diagnostics.length ? p.diagnostics[p.diagnostics.length - 1] : null;
+}
+
+function resolveCompareIds() {
+  var ids = state.players.map(function (p) { return p.id; });
+  var a = (state.__compareA && ids.indexOf(state.__compareA) !== -1) ? state.__compareA : ids[0];
+  var b = (state.__compareB && ids.indexOf(state.__compareB) !== -1 && state.__compareB !== a)
+    ? state.__compareB
+    : ids.filter(function (id) { return id !== a; })[0];
+  state.__compareA = a;
+  state.__compareB = b;
+  return { a: a, b: b };
+}
+
+function viewPlayerComparison() {
+  if (state.players.length < 2) {
+    return '<section class="card"><h2>Comparer deux joueurs</h2>' +
+      '<p class="muted">Ajoute un second joueur pour pouvoir comparer.</p></section>';
+  }
+
+  var ids = resolveCompareIds();
+  var playerA = state.players.filter(function (p) { return p.id === ids.a; })[0];
+  var playerB = state.players.filter(function (p) { return p.id === ids.b; })[0];
+
+  function options(selectedId, excludeId) {
+    return state.players.map(function (p) {
+      var label = p.profile.name || "Joueur sans nom";
+      var disabled = p.id === excludeId ? " disabled" : "";
+      return '<option value="' + p.id + '"' + (p.id === selectedId ? " selected" : "") + disabled + ">" + escapeHtml(label) + "</option>";
+    }).join("");
+  }
+
+  var html = '<section class="card"><h2>Comparer deux joueurs</h2>' +
+    '<div class="form-grid">' +
+    '<label>Joueur A<select onchange="changeCompareA(this.value)">' + options(ids.a, ids.b) + "</select></label>" +
+    '<label>Joueur B<select onchange="changeCompareB(this.value)">' + options(ids.b, ids.a) + "</select></label>" +
+    "</div>";
+
+  var diagA = latestDiagnosticOf(playerA);
+  var diagB = latestDiagnosticOf(playerB);
+
+  if (!diagA || !diagB) {
+    var missing = [];
+    if (!diagA) missing.push(escapeHtml(playerA.profile.name || "Joueur A"));
+    if (!diagB) missing.push(escapeHtml(playerB.profile.name || "Joueur B"));
+    html += '<p class="muted">' + missing.join(" et ") + " n'a pas encore de diagnostic.</p></section>";
+    return html;
+  }
+
+  html += '<div class="chart-box"><canvas id="chart-compare-radar"></canvas></div>';
+
+  html += '<table class="table"><thead><tr><th>Compétence</th><th>' +
+    escapeHtml(playerA.profile.name || "Joueur A") + "</th><th>" +
+    escapeHtml(playerB.profile.name || "Joueur B") + "</th><th>Écart</th></tr></thead><tbody>" +
+    SKILLS.map(function (s) {
+      var scoreA = diagA.entries[s.id] ? diagA.entries[s.id].score : 0;
+      var scoreB = diagB.entries[s.id] ? diagB.entries[s.id].score : 0;
+      var diff = scoreA - scoreB;
+      var diffText = diff === 0 ? "=" : (diff > 0 ? "+" + diff : String(diff));
+      return "<tr><td>" + s.label + "</td><td>" + scoreA + "/10</td><td>" + scoreB + "/10</td><td>" + diffText + "</td></tr>";
+    }).join("") +
+    "</tbody></table></section>";
+
+  return html;
+}
+
+function changeCompareA(id) {
+  state.__compareA = id;
+  render();
+}
+
+function changeCompareB(id) {
+  state.__compareB = id;
+  render();
 }
 
 /* ---------------- EXPORT PDF (impression navigateur) ---------------- */
@@ -920,6 +999,23 @@ function postRenderCharts() {
         history.map(function (h) { return fmtDate(h.date); }),
         history.map(function (h) { return h.score; }),
         history.map(function (h) { return h.potential; }));
+    }
+  }
+  if (currentTab === "club" && state.players.length >= 2) {
+    var ids = resolveCompareIds();
+    var playerA = state.players.filter(function (p) { return p.id === ids.a; })[0];
+    var playerB = state.players.filter(function (p) { return p.id === ids.b; })[0];
+    var diagA = latestDiagnosticOf(playerA);
+    var diagB = latestDiagnosticOf(playerB);
+    if (diagA && diagB) {
+      var avgA = computeCategoryAverages(diagA);
+      var avgB = computeCategoryAverages(diagB);
+      renderCategoryRadar("chart-compare-radar", "compare", [
+        { label: playerA.profile.name || "Joueur A", data: CATEGORIES.map(function (c) { return avgA[c.id]; }),
+          backgroundColor: "rgba(61,214,255,0.2)", borderColor: "#3dd6ff", pointBackgroundColor: "#3dd6ff" },
+        { label: playerB.profile.name || "Joueur B", data: CATEGORIES.map(function (c) { return avgB[c.id]; }),
+          backgroundColor: "rgba(255,106,61,0.2)", borderColor: "#ff6a3d", pointBackgroundColor: "#ff6a3d" }
+      ], CATEGORIES.map(function (c) { return c.label; }));
     }
   }
 }
