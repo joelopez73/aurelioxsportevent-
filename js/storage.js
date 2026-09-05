@@ -147,6 +147,26 @@ function computeCategoryAverages(diagnostic) {
   return out;
 }
 
+/* Moyenne des scores par catégorie sur le dernier diagnostic de chaque
+   joueur du groupe (hors excludePlayerId), pour se situer par rapport
+   au reste des joueurs enregistrés. */
+function computeGroupAverages(players, excludePlayerId) {
+  var sums = {}, count = 0;
+  CATEGORIES.forEach(function (c) { sums[c.id] = 0; });
+  players.forEach(function (p) {
+    if (p.id === excludePlayerId || !p.diagnostics.length) return;
+    var diag = p.diagnostics[p.diagnostics.length - 1];
+    var avg = computeCategoryAverages(diag);
+    CATEGORIES.forEach(function (c) { sums[c.id] += avg[c.id]; });
+    count++;
+  });
+  var averages = {};
+  CATEGORIES.forEach(function (c) {
+    averages[c.id] = count ? Math.round((sums[c.id] / count) * 10) / 10 : 0;
+  });
+  return { averages: averages, count: count };
+}
+
 /* Historique d'une compétence à travers tous les diagnostics d'un joueur */
 function getSkillHistory(diagnostics, skillId) {
   return diagnostics

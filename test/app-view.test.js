@@ -121,6 +121,25 @@ test("viewClub: liste chaque joueur avec ses priorités ou 'aucun diagnostic'", 
   assert.match(html, /aucun diagnostic/);
 });
 
+test("viewGroupComparisonSection: invite à ajouter des joueurs seul, affiche le radar sinon", () => {
+  const app = loadApp();
+  const diag = { id: "d1", date: "2024-01-01", entries: {} };
+  app.SKILLS.forEach((s) => { diag.entries[s.id] = { score: 5, potential: 3 }; });
+  app.player().diagnostics.push(diag);
+
+  let html = app.viewGroupComparisonSection();
+  assert.match(html, /Ajoute d'autres joueurs/);
+
+  const emma = app.addPlayer(app.state, "Emma"); // devient le joueur actif
+  const diag2 = { id: "d2", date: "2024-01-01", entries: {} };
+  app.SKILLS.forEach((s) => { diag2.entries[s.id] = { score: 8, potential: 3 }; });
+  emma.diagnostics.push(diag2);
+
+  html = app.viewGroupComparisonSection();
+  assert.match(html, /autre joueur/);
+  assert.match(html, /chart-group-radar/);
+});
+
 test("printableDiagnosticHtml / printablePlanHtml: message explicite quand rien n'existe encore", () => {
   const app = loadApp();
   assert.match(app.printableDiagnosticHtml(), /Aucun diagnostic disponible/);
