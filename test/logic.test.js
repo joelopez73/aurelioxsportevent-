@@ -1,4 +1,4 @@
-/* Tests de la logique métier (js/data.js + js/storage.js), sans dépendance
+/* Tests de la logique métier (app/js/data.js + app/js/storage.js), sans dépendance
    externe : lancer avec `node --test test/`.
    js/*.js sont des scripts globaux pensés pour le navigateur (pas de
    module.exports) ; on les charge donc dans un contexte vm partagé,
@@ -24,7 +24,7 @@ function loadApp() {
   const sandbox = { console, localStorage: makeFakeLocalStorage() };
   vm.createContext(sandbox);
   ["data.js", "storage.js"].forEach((file) => {
-    const code = fs.readFileSync(path.join(__dirname, "..", "js", file), "utf8");
+    const code = fs.readFileSync(path.join(__dirname, "..", "app", "js", file), "utf8");
     vm.runInContext(code, sandbox, { filename: file });
   });
   return sandbox;

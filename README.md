@@ -4,7 +4,8 @@ Application web pour joueurs de football (13–19 ans) : diagnostic sur 20 comp�
 
 ## Lancer l'application
 
-Aucune installation requise : ouvre `index.html` dans un navigateur, ou sers le dossier avec un serveur statique (ex. `python3 -m http.server`) pour un rendu optimal des graphiques.
+- `index.html` (racine) : landing page de présentation du projet.
+- `app/index.html` : l'application elle-même. Ouvre-la directement dans un navigateur, ou sers le dossier avec un serveur statique (ex. `python3 -m http.server`) pour un rendu optimal des graphiques.
 
 Toutes les données (profil, diagnostics, plan, matchs) sont stockées localement dans le navigateur (`localStorage`) — aucun compte, aucun serveur, aucun envoi de données.
 
@@ -23,13 +24,15 @@ Toutes les données (profil, diagnostics, plan, matchs) sont stockées localemen
 ## Structure
 
 ```
-index.html
-css/styles.css
-js/data.js      référentiel des compétences, postes, pondérations, banque d'exercices
-js/storage.js   persistance locale + logique du moteur de priorités / génération du plan
-js/charts.js    rendu des graphiques (Chart.js via CDN, avec repli hors-ligne)
-js/app.js       vues et logique d'interface
-test/           tests de la logique métier (js/data.js + js/storage.js)
+index.html          landing page (présentation, sans dépendance à l'app)
+css/landing.css      styles de la landing page
+app/index.html       application AURELIOX
+app/css/styles.css
+app/js/data.js       référentiel des compétences, postes, pondérations, banque d'exercices
+app/js/storage.js    persistance locale + logique du moteur de priorités / génération du plan
+app/js/charts.js     rendu des graphiques (Chart.js via CDN, avec repli hors-ligne)
+app/js/app.js        vues et logique d'interface
+test/                tests de la logique métier (app/js/data.js + app/js/storage.js)
 ```
 
 ## Tests
@@ -44,4 +47,4 @@ Nécessite Node.js 18+ (utilise le test runner intégré `node:test`, qui décou
 
 ## Note honnête
 
-Les pondérations d'impact par poste et la banque d'exercices sont des choix de conception par défaut (dans `js/data.js`), fondés sur des repères de coaching courants mais pas des statistiques vérifiées — à ajuster selon le niveau et le regard réel du coach.
+Les pondérations d'impact par poste et la banque d'exercices sont des choix de conception par défaut (dans `app/js/data.js`), fondés sur des repères de coaching courants mais pas des statistiques vérifiées — à ajuster selon le niveau et le regard réel du coach.

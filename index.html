@@ -3,32 +3,181 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AURELIOX — Système de décision pour progresser</title>
-  <link rel="stylesheet" href="css/styles.css">
+  <title>AURELIOX — L'agent qui transforme tes points faibles en plan d'entraînement</title>
+  <meta name="description" content="AURELIOX diagnostique 20 compétences, calcule tes 3 priorités et génère un plan d'entraînement de 30 jours. 100% gratuit, 100% local : aucune donnée n'est envoyée à un serveur.">
+  <link rel="stylesheet" href="css/landing.css">
 </head>
 <body>
-  <header class="topbar no-print">
-    <div class="brand">AURELIOX</div>
-    <div class="tagline">Diagnostic → Priorités → Plan → Retest</div>
-    <button id="theme-toggle" class="theme-toggle" onclick="toggleTheme()"></button>
+  <header class="nav">
+    <div class="nav-inner">
+      <a href="#top" class="brand">AURELIOX</a>
+      <nav class="nav-links">
+        <a href="#comment-ca-marche">Comment ça marche</a>
+        <a href="#fonctionnalites">Fonctionnalités</a>
+        <a href="#confidentialite">Confidentialité</a>
+      </nav>
+      <div class="nav-actions">
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Changer de thème"></button>
+        <a href="app/index.html" class="btn btn-primary btn-sm">Lancer l'app</a>
+      </div>
+    </div>
   </header>
 
-  <div id="player-bar" class="no-print"></div>
-  <div id="backup-banner" class="no-print"></div>
-  <nav id="nav-tabs" class="tabs no-print"></nav>
+  <main id="top">
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">Pour jeunes athlètes de 13 à 19 ans</p>
+        <h1>Transforme tes points faibles en <span class="grad">plan d'entraînement de 30 jours</span></h1>
+        <p class="lede">
+          AURELIOX est ton agent de progression : il diagnostique 20 compétences, calcule
+          automatiquement tes 3 priorités et te construit un planning jour par jour. Fini le
+          carnet d'objectifs vague — place à une décision claire de ce sur quoi travailler cette semaine.
+        </p>
+        <div class="hero-actions">
+          <a href="app/index.html" class="btn btn-primary btn-lg">Lancer le diagnostic gratuit</a>
+          <a href="#comment-ca-marche" class="btn btn-ghost btn-lg">Voir comment ça marche</a>
+        </div>
+        <p class="trust-line">Aucune inscription · Aucune donnée envoyée à un serveur · 100% gratuit</p>
+      </div>
 
-  <main id="app-content" class="content no-print"></main>
+      <div class="flow-diagram" role="img" aria-label="Diagnostic, puis Priorités, puis Plan 30 jours, puis Retest">
+        <div class="flow-step">
+          <span class="flow-num">1</span>
+          <span class="flow-label">Diagnostic</span>
+        </div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">
+          <span class="flow-num">2</span>
+          <span class="flow-label">Priorités</span>
+        </div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">
+          <span class="flow-num">3</span>
+          <span class="flow-label">Plan 30 jours</span>
+        </div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">
+          <span class="flow-num">4</span>
+          <span class="flow-label">Retest</span>
+        </div>
+      </div>
+    </section>
 
-  <footer class="footer no-print">
-    <p>AURELIOX — © <span id="year"></span>. Toutes les données restent dans ce navigateur (aucune connexion, aucun compte).</p>
+    <section id="comment-ca-marche" class="section">
+      <h2>Comment ça marche</h2>
+      <p class="section-lede">Quatre étapes, aucune ambiguïté sur ce qu'il faut faire ensuite.</p>
+      <div class="steps-grid">
+        <div class="step-card">
+          <span class="step-icon">📋</span>
+          <h3>1. Diagnostic</h3>
+          <p>Tu notes 20 compétences (technique, intelligence de jeu, défense, athlétique, mental) sur un score /10, avec un potentiel de progression /5 pour chacune.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-icon">🎯</span>
+          <h3>2. Priorités</h3>
+          <p>Le moteur calcule <code>(10 − score) × impact du poste × potentiel</code> et fait ressortir tes 3 priorités — ajustables à la main si tu veux garder le contrôle.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-icon">🗓️</span>
+          <h3>3. Plan 30 jours</h3>
+          <p>Un planning de 4 semaines généré à partir de ces 3 priorités, avec des tâches que tu coches, modifies ou complètes.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-icon">📈</span>
+          <h3>4. Retest</h3>
+          <p>Rappels à J30/J60/J90 pour repasser le diagnostic et comparer ta progression, compétence par compétence.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="fonctionnalites" class="section section-alt">
+      <h2>Tout ce dont tu as besoin pour structurer ta progression</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <h3>⚽ Match → Drill</h3>
+          <p>Après un match, choisis un problème observé et reçois un exercice ciblé, ajoutable directement à ton plan.</p>
+        </div>
+        <div class="feature-card">
+          <h3>👥 Mode coach</h3>
+          <p>Gère plusieurs joueurs dans la même app, chacun avec son profil, ses diagnostics et son plan isolés.</p>
+        </div>
+        <div class="feature-card">
+          <h3>📊 Comparaison de groupe</h3>
+          <p>Visualise le profil d'un joueur face à la moyenne du groupe, ou compare deux joueurs côte à côte.</p>
+        </div>
+        <div class="feature-card">
+          <h3>🏆 Objectifs personnalisés</h3>
+          <p>Fixe une cible par compétence et suis ta progression vers l'objectif, recalculée à chaque nouveau diagnostic.</p>
+        </div>
+        <div class="feature-card">
+          <h3>⬇️ Exports CSV / PDF / .ics</h3>
+          <p>Exporte ton historique en CSV, tes diagnostics et ton plan en PDF, ou ton planning dans ton calendrier (Google, Apple, Outlook).</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔔 Rappels navigateur</h3>
+          <p>Notifications pour les échéances de retest J30/J60/J90, tant que l'onglet est ouvert.</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌓 Thème clair / sombre</h3>
+          <p>L'app s'adapte à ta préférence visuelle, avec ton choix mémorisé d'une session à l'autre.</p>
+        </div>
+        <div class="feature-card">
+          <h3>🥅 Pensé football</h3>
+          <p>7 postes spécifiques (gardien, défenseur central, latéral, milieu défensif, milieu offensif, ailier, attaquant) avec des pondérations et une banque d'exercices dédiées.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="confidentialite" class="section honesty">
+      <div class="honesty-box">
+        <h2>Note honnête</h2>
+        <ul>
+          <li><strong>Tes données restent dans ton navigateur.</strong> AURELIOX n'a pas de serveur : aucun compte, aucune connexion, aucun envoi de données. Tout vit dans le <code>localStorage</code> de ton navigateur — exporte régulièrement en JSON si tu changes d'appareil ou vides ton cache.</li>
+          <li><strong>Les pondérations par poste et la banque d'exercices sont des choix de conception</strong>, pas des données validées scientifiquement — à ajuster selon le sport, le niveau et le regard du coach.</li>
+          <li><strong>Les rappels de retest sont limités au navigateur.</strong> Sans serveur ni application mobile, une notification ne peut s'afficher que si l'onglet AURELIOX est ouvert.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section final-cta">
+      <h2>Prêt à savoir sur quoi travailler cette semaine ?</h2>
+      <p class="section-lede">Le diagnostic prend quelques minutes. Le plan, lui, se construit tout seul.</p>
+      <a href="app/index.html" class="btn btn-primary btn-lg">Lancer AURELIOX gratuitement</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>AURELIOX — © <span id="year"></span>. Toutes les données restent dans ton navigateur (aucune connexion, aucun compte).</p>
   </footer>
 
-  <div id="print-area"></div>
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/app.js"></script>
+    (function () {
+      var STORAGE_KEY = "aureliox_landing_theme";
+      var root = document.documentElement;
+      var btn = document.getElementById("theme-toggle");
+
+      function apply(theme) {
+        if (theme === "light") {
+          root.setAttribute("data-theme", "light");
+          btn.textContent = "🌙 Sombre";
+        } else {
+          root.removeAttribute("data-theme");
+          btn.textContent = "☀️ Clair";
+        }
+      }
+
+      var saved = null;
+      try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { /* stockage indisponible */ }
+      apply(saved === "light" ? "light" : "dark");
+
+      btn.addEventListener("click", function () {
+        var next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+        apply(next);
+        try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { /* stockage indisponible */ }
+      });
+    })();
+  </script>
 </body>
 </html>

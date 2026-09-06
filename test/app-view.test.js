@@ -1,4 +1,4 @@
-/* Tests des fonctions "pures" de js/app.js (constructeurs de HTML et
+/* Tests des fonctions "pures" de app/js/app.js (constructeurs de HTML et
    utilitaires qui ne touchent pas le DOM) : échappement HTML, formatage,
    export CSV, logique du rappel de sauvegarde, et quelques vues.
    Chargé dans un contexte vm avec un stub minimal de `document`/`window`
@@ -33,7 +33,7 @@ function loadApp() {
   };
   vm.createContext(sandbox);
   ["data.js", "storage.js", "app.js"].forEach((file) => {
-    const code = fs.readFileSync(path.join(__dirname, "..", "js", file), "utf8");
+    const code = fs.readFileSync(path.join(__dirname, "..", "app", "js", file), "utf8");
     vm.runInContext(code, sandbox, { filename: file });
   });
   return sandbox;
